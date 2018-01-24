@@ -1,5 +1,7 @@
 package io.github.droidkaigi.confsched2018.presentation
 
+import android.content.Context
+import android.content.Intent
 import android.databinding.DataBindingUtil
 import android.os.Bundle
 import android.support.annotation.DrawableRes
@@ -12,7 +14,8 @@ import io.github.droidkaigi.confsched2018.R
 import io.github.droidkaigi.confsched2018.databinding.ActivityMainBinding
 import io.github.droidkaigi.confsched2018.presentation.common.activity.BaseActivity
 import io.github.droidkaigi.confsched2018.presentation.common.menu.DrawerMenu
-import io.github.droidkaigi.confsched2018.util.ext.elevationForPostLolipop
+import io.github.droidkaigi.confsched2018.util.ext.disableShiftMode
+import io.github.droidkaigi.confsched2018.util.ext.elevationForPostLollipop
 import javax.inject.Inject
 
 class MainActivity : BaseActivity(), HasSupportFragmentInjector {
@@ -30,31 +33,31 @@ class MainActivity : BaseActivity(), HasSupportFragmentInjector {
         setSupportActionBar(binding.toolbar)
 
         setupBottomNavigation(savedInstanceState)
-        drawerMenu.setup(binding.toolbar, binding.drawerLayout, binding.drawer, true)
+        drawerMenu.setup(binding.drawerLayout, binding.drawer, binding.toolbar, true)
     }
 
     private fun setupBottomNavigation(savedInstanceState: Bundle?) {
-
+        binding.bottomNavigation.disableShiftMode()
         binding.bottomNavigation.itemIconTintList = null
         binding.bottomNavigation.setOnNavigationItemSelectedListener({ item ->
             val navigationItem = BottomNavigationItem
                     .values()
                     .first { it.menuId == item.itemId }
 
-            binding.toolbar.elevationForPostLolipop = if (navigationItem.isUseToolbarElevation) {
+            binding.toolbar.elevationForPostLollipop = if (navigationItem.isUseToolbarElevation) {
                 resources.getDimensionPixelSize(R.dimen.elevation_app_bar).toFloat()
             } else {
                 0F
             }
             supportActionBar?.apply {
-                if (navigationItem.imageRes != null) {
+                title = if (navigationItem.imageRes != null) {
                     setDisplayShowHomeEnabled(true)
                     setIcon(navigationItem.imageRes)
-                    title = null
+                    null
                 } else {
                     setDisplayShowHomeEnabled(false)
                     setIcon(null)
-                    title = item.title
+                    item.title
                 }
             }
 
@@ -62,11 +65,23 @@ class MainActivity : BaseActivity(), HasSupportFragmentInjector {
             true
         })
         if (savedInstanceState == null) {
-            binding.bottomNavigation.selectedItemId = R.id.navigation_sessions
+            when (intent.getStringExtra("shortcut")) {
+                "favorite" -> {
+                    binding.bottomNavigation.selectedItemId = R.id.navigation_favorite_sessions
+                }
+                else -> binding.bottomNavigation.selectedItemId = R.id.navigation_sessions
+            }
         }
+        binding.bottomNavigation.setOnNavigationItemReselectedListener { }
     }
 
     override fun supportFragmentInjector(): AndroidInjector<Fragment> = dispatchingAndroidInjector
+
+    override fun onBackPressed() {
+        if (drawerMenu.closeDrawerIfNeeded()) {
+            super.onBackPressed()
+        }
+    }
 
     enum class BottomNavigationItem(
             @MenuRes val menuId: Int,
@@ -86,5 +101,9 @@ class MainActivity : BaseActivity(), HasSupportFragmentInjector {
         FEED(R.id.navigation_feed, null, true, {
             navigateToFeed()
         })
+    }
+
+    companion object {
+        fun createIntent(context: Context): Intent = Intent(context, MainActivity::class.java)
     }
 }

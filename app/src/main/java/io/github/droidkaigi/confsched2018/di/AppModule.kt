@@ -1,23 +1,33 @@
 package io.github.droidkaigi.confsched2018.di
 
+import android.app.Application
+import android.content.Context
 import dagger.Module
 import dagger.Provides
 import io.github.droidkaigi.confsched2018.data.api.DroidKaigiApi
 import io.github.droidkaigi.confsched2018.data.api.FeedApi
+import io.github.droidkaigi.confsched2018.data.api.GithubApi
+import io.github.droidkaigi.confsched2018.data.db.ContributorDatabase
 import io.github.droidkaigi.confsched2018.data.db.FavoriteDatabase
 import io.github.droidkaigi.confsched2018.data.db.SessionDatabase
+import io.github.droidkaigi.confsched2018.data.repository.ContributorDataRepository
+import io.github.droidkaigi.confsched2018.data.repository.ContributorRepository
 import io.github.droidkaigi.confsched2018.data.repository.FeedDataRepository
 import io.github.droidkaigi.confsched2018.data.repository.FeedRepository
 import io.github.droidkaigi.confsched2018.data.repository.SessionDataRepository
 import io.github.droidkaigi.confsched2018.data.repository.SessionRepository
+import io.github.droidkaigi.confsched2018.data.repository.SponsorPlanDataRepository
+import io.github.droidkaigi.confsched2018.data.repository.SponsorPlanRepository
 import io.github.droidkaigi.confsched2018.util.rx.AppSchedulerProvider
 import io.github.droidkaigi.confsched2018.util.rx.SchedulerProvider
 import javax.inject.Singleton
 
 @Module(includes = [(ViewModelModule::class)])
-internal class AppModule {
+internal object AppModule {
+    @Singleton @Provides @JvmStatic
+    fun provideContext(application: Application): Context = application
 
-    @Singleton @Provides
+    @Singleton @Provides @JvmStatic
     fun provideSessionRepository(
             api: DroidKaigiApi,
             sessionDatabase: SessionDatabase,
@@ -26,12 +36,25 @@ internal class AppModule {
     ): SessionRepository =
             SessionDataRepository(api, sessionDatabase, favoriteDatabase, schedulerProvider)
 
-    @Singleton @Provides
+    @Singleton @Provides @JvmStatic
     fun provideFeedRepository(
             feedApi: FeedApi
     ): FeedRepository =
             FeedDataRepository(feedApi)
 
-    @Singleton @Provides
+    @Singleton @Provides @JvmStatic
+    fun provideSponsorPlanRepository(
+            droidKaigiApi: DroidKaigiApi
+    ): SponsorPlanRepository = SponsorPlanDataRepository(droidKaigiApi)
+
+    @Singleton @Provides @JvmStatic
     fun provideSchedulerProvider(): SchedulerProvider = AppSchedulerProvider()
+
+    @Singleton @Provides @JvmStatic
+    fun provideContributorsRepository(
+            api: GithubApi,
+            contributorDatabase: ContributorDatabase,
+            schedulerProvider: SchedulerProvider
+    ): ContributorRepository =
+            ContributorDataRepository(api, contributorDatabase, schedulerProvider)
 }
