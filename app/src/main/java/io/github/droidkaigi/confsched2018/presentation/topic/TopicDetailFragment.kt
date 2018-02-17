@@ -3,20 +3,19 @@ package io.github.droidkaigi.confsched2018.presentation.topic
 import android.arch.lifecycle.ViewModelProvider
 import android.arch.lifecycle.ViewModelProviders
 import android.os.Bundle
-import android.support.v4.app.Fragment
 import android.support.v7.widget.LinearLayoutManager
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.os.bundleOf
 import com.xwray.groupie.GroupAdapter
 import com.xwray.groupie.ViewHolder
+import dagger.android.support.DaggerFragment
 import io.github.droidkaigi.confsched2018.R
 import io.github.droidkaigi.confsched2018.databinding.FragmentTopicDetailBinding
-import io.github.droidkaigi.confsched2018.di.Injectable
 import io.github.droidkaigi.confsched2018.model.Session
 import io.github.droidkaigi.confsched2018.presentation.NavigationController
 import io.github.droidkaigi.confsched2018.presentation.Result
-import io.github.droidkaigi.confsched2018.presentation.common.binding.FragmentDataBindingComponent
 import io.github.droidkaigi.confsched2018.presentation.sessions.item.SimpleSessionsSection
 import io.github.droidkaigi.confsched2018.presentation.sessions.item.SpeechSessionItem
 import io.github.droidkaigi.confsched2018.util.SessionAlarm
@@ -25,7 +24,7 @@ import io.github.droidkaigi.confsched2018.util.ext.setLinearDivider
 import timber.log.Timber
 import javax.inject.Inject
 
-class TopicDetailFragment : Fragment(), Injectable {
+class TopicDetailFragment : DaggerFragment() {
 
     @Inject lateinit var navigationController: NavigationController
     @Inject lateinit var sessionAlarm: SessionAlarm
@@ -43,13 +42,16 @@ class TopicDetailFragment : Fragment(), Injectable {
         sessionAlarm.toggleRegister(session)
     }
 
+    private val onFeedbackListener = { session: Session.SpeechSession ->
+        navigationController.navigateToSessionsFeedbackActivity(session)
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
                               savedInstanceState: Bundle?): View? {
         binding = FragmentTopicDetailBinding.inflate(
                 inflater,
                 container!!,
-                false,
-                FragmentDataBindingComponent(this)
+                false
         )
         return binding.root
     }
@@ -61,7 +63,9 @@ class TopicDetailFragment : Fragment(), Injectable {
         topicDetailViewModel.topicSessions.observe(this, { result ->
             when (result) {
                 is Result.Success -> {
-                    sessionsSection.updateSessions(result.data.second, onFavoriteClickListener)
+                    sessionsSection.updateSessions(result.data.second,
+                            onFavoriteClickListener,
+                            onFeedbackListener)
                 }
                 is Result.Failure -> {
                     Timber.e(result.e)
@@ -89,9 +93,7 @@ class TopicDetailFragment : Fragment(), Injectable {
     companion object {
         const val EXTRA_TOPIC_ID = "EXTRA_TOPIC_ID"
         fun newInstance(topicId: Int): TopicDetailFragment = TopicDetailFragment().apply {
-            arguments = Bundle().apply {
-                putInt(EXTRA_TOPIC_ID, topicId)
-            }
+            arguments = bundleOf(EXTRA_TOPIC_ID to topicId)
         }
     }
 }

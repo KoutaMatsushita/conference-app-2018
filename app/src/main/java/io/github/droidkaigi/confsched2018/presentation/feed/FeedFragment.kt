@@ -5,29 +5,33 @@ import android.arch.lifecycle.ViewModelProviders
 import android.os.Bundle
 import android.support.constraint.ConstraintSet
 import android.support.transition.TransitionInflater
-import android.support.v4.app.Fragment
-import android.support.v7.widget.LinearLayoutManager
+import android.support.v4.content.res.ResourcesCompat
+import android.support.v7.widget.DividerItemDecoration
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import com.google.firebase.analytics.FirebaseAnalytics
 import com.xwray.groupie.GroupAdapter
 import com.xwray.groupie.Section
 import com.xwray.groupie.ViewHolder
+import dagger.android.support.DaggerFragment
 import io.github.droidkaigi.confsched2018.R
 import io.github.droidkaigi.confsched2018.databinding.FragmentFeedBinding
-import io.github.droidkaigi.confsched2018.di.Injectable
+import io.github.droidkaigi.confsched2018.presentation.NavigationController
 import io.github.droidkaigi.confsched2018.presentation.Result
 import io.github.droidkaigi.confsched2018.presentation.feed.item.FeedItem
 import io.github.droidkaigi.confsched2018.util.ext.observe
-import io.github.droidkaigi.confsched2018.util.ext.setLinearDivider
+import io.github.droidkaigi.confsched2018.util.ext.setVisible
 import timber.log.Timber
 import javax.inject.Inject
 
-class FeedFragment : Fragment(), Injectable {
+class FeedFragment : DaggerFragment() {
 
     private lateinit var binding: FragmentFeedBinding
+    @Inject lateinit var navigationController: NavigationController
 
     private val postsSection = Section()
+    private var fireBaseAnalytics: FirebaseAnalytics? = null
 
     private val feedItemCollapsed by lazy {
         ConstraintSet().apply {
@@ -44,6 +48,9 @@ class FeedFragment : Fragment(), Injectable {
             constrainHeight(R.id.content, ConstraintSet.WRAP_CONTENT)
         }
     }
+    private val onClickUri: (String) -> Unit = {
+        navigationController.navigateToExternalBrowser(it)
+    }
 
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
     private val postsViewModel: FeedViewModel by lazy {
@@ -59,6 +66,7 @@ class FeedFragment : Fragment(), Injectable {
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
 
+        fireBaseAnalytics = FirebaseAnalytics.getInstance(context)
         setupRecyclerView()
 
         postsViewModel.feeds.observe(this, { result ->
@@ -76,15 +84,23 @@ class FeedFragment : Fragment(), Injectable {
                                         feedItemCollapsed,
                                         feedItemExpanded,
                                         expandTransition,
-                                        collapseTransition
+                                        collapseTransition,
+                                        onClickUri
                                 )
                             })
+                    binding.feedInactiveGroup.setVisible(posts.isEmpty())
+                    binding.feedRecycler.setVisible(posts.isNotEmpty())
                 }
                 is Result.Failure -> {
                     Timber.e(result.e)
                 }
             }
         })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        fireBaseAnalytics?.setCurrentScreen(activity!!, null, this::class.java.simpleName)
     }
 
     private fun setupRecyclerView() {
@@ -94,10 +110,13 @@ class FeedFragment : Fragment(), Injectable {
                 //TODO
             })
         }
-        val linearLayoutManager = LinearLayoutManager(context)
         binding.feedRecycler.apply {
             adapter = groupAdapter
-            setLinearDivider(R.drawable.shape_divider_vertical_6dp, linearLayoutManager)
+            val dividerDrawable = ResourcesCompat.getDrawable(
+                    context.resources, R.drawable.shape_divider_1dp, null)
+            addItemDecoration(DividerItemDecoration(context, DividerItemDecoration.VERTICAL).apply {
+                dividerDrawable?.let { setDrawable(it) }
+            })
         }
     }
 

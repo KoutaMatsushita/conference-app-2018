@@ -19,12 +19,11 @@
     <android.support.v7.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:layout_marginTop="4dp"
         android:clickable="true"
         android:focusable="true"
         android:foreground="?android:attr/selectableItemBackground"
         android:stateListAnimator="@animator/card_state_list_anim"
+        android:background="@{session.isOnGoing ? @color/current_card_background_color : @color/card_background_color}"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -38,29 +37,52 @@
             >
 
             <TextView
-                android:id="@+id/day_number"
+                android:id="@+id/current_badge"
+                style="@style/TextStyle.App.Caption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
                 android:layout_marginStart="12dp"
-                android:layout_marginTop="16dp"
-                android:text='@{"DAY"+session.dayNumber+" / "}'
-                style="@style/TextStyle.App.Caption"
-                android:visibility="@{isShowDayNumber ? View.VISIBLE : View.GONE}"
+                android:text="@string/session_current_badge"
+                android:textColor="@color/accent"
+                android:visibility="@{session.isOnGoing ? View.VISIBLE : View.GONE}"
                 app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/day_number"
+                />
+            <TextView
+                android:id="@+id/day_number"
+                style="@style/TextStyle.App.Caption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="16dp"
+                android:text='@{"DAY"+session.dayNumber}'
+                android:visibility="@{isShowDayNumber ? View.VISIBLE : View.GONE}"
+                app:layout_constraintStart_toEndOf="@+id/current_badge"
                 app:layout_constraintTop_toTopOf="parent"
-                tools:text="DAY1 / "
+                app:layout_goneMarginStart="12dp"
+                tools:text="DAY1"
+                />
+
+            <TextView
+                android:id="@+id/divider_day_and_period"
+                style="@style/TextStyle.App.Caption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/session_header_divider"
+                android:visibility="@{isShowDayNumber ? View.VISIBLE : View.GONE}"
+                app:layout_constraintStart_toEndOf="@+id/day_number"
+                app:layout_constraintTop_toTopOf="@id/day_number"
                 />
 
             <TextView
                 android:id="@+id/period"
+                style="@style/TextStyle.App.Caption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
-                style="@style/TextStyle.App.Caption"
                 app:endDate="@{session.endTime}"
-                app:layout_constraintStart_toEndOf="@id/day_number"
-                app:layout_constraintTop_toTopOf="@id/day_number"
+                app:layout_constraintStart_toEndOf="@id/divider_day_and_period"
+                app:layout_constraintTop_toTopOf="@id/divider_day_and_period"
                 app:layout_goneMarginStart="12dp"
                 app:layout_goneMarginTop="16dp"
                 app:startDate="@{session.startTime}"
@@ -69,10 +91,10 @@
 
             <TextView
                 android:id="@+id/room"
+                style="@style/TextStyle.App.Caption"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:maxLines="3"
-                style="@style/TextStyle.App.Caption"
                 app:layout_constraintStart_toEndOf="@id/period"
                 app:layout_constraintTop_toTopOf="@+id/period"
                 app:prefix='@{" / "}'
@@ -82,6 +104,7 @@
 
             <android.support.text.emoji.widget.EmojiTextView
                 android:id="@+id/title"
+                style="@style/TextStyle.App.Title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
@@ -89,7 +112,7 @@
                 android:layout_marginStart="12dp"
                 android:layout_marginTop="10dp"
                 android:text="@{session.title}"
-                style="@style/TextStyle.App.Title"
+                android:textAlignment="viewStart"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"

@@ -5,7 +5,6 @@ import android.arch.lifecycle.ViewModelProviders
 import android.os.Bundle
 import android.support.transition.TransitionInflater
 import android.support.transition.TransitionManager
-import android.support.v4.app.Fragment
 import android.support.v7.widget.LinearLayoutManager
 import android.support.v7.widget.RecyclerView
 import android.support.v7.widget.SimpleItemAnimator
@@ -14,26 +13,39 @@ import android.view.View
 import android.view.ViewGroup
 import com.xwray.groupie.GroupAdapter
 import com.xwray.groupie.ViewHolder
+import dagger.android.support.DaggerFragment
 import io.github.droidkaigi.confsched2018.R
 import io.github.droidkaigi.confsched2018.databinding.FragmentAllSessionsBinding
-import io.github.droidkaigi.confsched2018.di.Injectable
 import io.github.droidkaigi.confsched2018.model.Session
 import io.github.droidkaigi.confsched2018.presentation.NavigationController
 import io.github.droidkaigi.confsched2018.presentation.Result
+import io.github.droidkaigi.confsched2018.presentation.common.pref.PreviousSessionPrefs
+import io.github.droidkaigi.confsched2018.presentation.common.view.OnTabReselectedListener
+import io.github.droidkaigi.confsched2018.presentation.sessions.SessionsFragment.CurrentSessionScroller
+import io.github.droidkaigi.confsched2018.presentation.sessions.SessionsFragment.SavePreviousSessionScroller
 import io.github.droidkaigi.confsched2018.presentation.sessions.item.DateSessionsSection
 import io.github.droidkaigi.confsched2018.presentation.sessions.item.SpeechSessionItem
 import io.github.droidkaigi.confsched2018.util.ProgressTimeLatch
 import io.github.droidkaigi.confsched2018.util.SessionAlarm
 import io.github.droidkaigi.confsched2018.util.ext.addOnScrollListener
+import io.github.droidkaigi.confsched2018.util.ext.getScrollState
 import io.github.droidkaigi.confsched2018.util.ext.isGone
 import io.github.droidkaigi.confsched2018.util.ext.observe
+import io.github.droidkaigi.confsched2018.util.ext.restoreScrollState
 import io.github.droidkaigi.confsched2018.util.ext.setLinearDivider
 import io.github.droidkaigi.confsched2018.util.ext.setTextIfChanged
 import io.github.droidkaigi.confsched2018.util.ext.setVisible
+import org.threeten.bp.ZoneId
+import org.threeten.bp.ZonedDateTime
 import timber.log.Timber
+import java.util.Date
 import javax.inject.Inject
 
-class AllSessionsFragment : Fragment(), Injectable {
+class AllSessionsFragment :
+        DaggerFragment(),
+        CurrentSessionScroller,
+        OnTabReselectedListener,
+        SavePreviousSessionScroller {
 
     private lateinit var binding: FragmentAllSessionsBinding
 
@@ -42,14 +54,19 @@ class AllSessionsFragment : Fragment(), Injectable {
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
     @Inject lateinit var navigationController: NavigationController
     @Inject lateinit var sessionAlarm: SessionAlarm
+    @Inject lateinit var sharedRecycledViewPool: RecyclerView.RecycledViewPool
 
-    private val sessionsViewModel: AllSessionsViewModel by lazy {
+    private val allSessionsViewModel: AllSessionsViewModel by lazy {
         ViewModelProviders.of(this, viewModelFactory).get(AllSessionsViewModel::class.java)
     }
 
     private val onFavoriteClickListener = { session: Session.SpeechSession ->
-        sessionsViewModel.onFavoriteClick(session)
+        allSessionsViewModel.onFavoriteClick(session)
         sessionAlarm.toggleRegister(session)
+    }
+
+    private val onFeedbackListener = { session: Session.SpeechSession ->
+        navigationController.navigateToSessionsFeedbackActivity(session)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
@@ -66,20 +83,61 @@ class AllSessionsFragment : Fragment(), Injectable {
         val progressTimeLatch = ProgressTimeLatch {
             binding.progress.visibility = if (it) View.VISIBLE else View.GONE
         }
-        sessionsViewModel.sessions.observe(this, { result ->
+        allSessionsViewModel.sessions.observe(this, { result ->
             when (result) {
                 is Result.Success -> {
                     val sessions = result.data
-                    sessionsSection.updateSessions(sessions, onFavoriteClickListener)
+                    sessionsSection.updateSessions(sessions, onFavoriteClickListener,
+                            onFeedbackListener, true)
+
+                    allSessionsViewModel.onShowSessions()
+                    if (allSessionsViewModel.isNeedRestoreScrollState) {
+                        scrollToPreviousSession()
+                    }
                 }
                 is Result.Failure -> {
                     Timber.e(result.e)
                 }
             }
         })
-        sessionsViewModel.isLoading.observe(this, { isLoading ->
+        allSessionsViewModel.isLoading.observe(this, { isLoading ->
             progressTimeLatch.loading = isLoading ?: false
         })
+        allSessionsViewModel.refreshFocusCurrentSession.observe(this, {
+            if (it != true) return@observe
+            scrollToCurrentSession()
+        })
+    }
+
+    override fun scrollToCurrentSession() {
+        val now = Date(ZonedDateTime.now(ZoneId.of(ZoneId.SHORT_IDS["JST"]))
+                .toInstant().toEpochMilli())
+        val currentSessionPosition = sessionsSection.getDateHeaderPositionByDate(now)
+        binding.sessionsRecycler.scrollToPosition(currentSessionPosition)
+    }
+
+    override fun onTabReselected() {
+        binding.sessionsRecycler.smoothScrollToPosition(0)
+    }
+
+    override fun requestSavingScrollState() {
+        val layoutManager = binding.sessionsRecycler.layoutManager as LinearLayoutManager
+        PreviousSessionPrefs.scrollState = layoutManager.getScrollState()
+    }
+
+    override fun requestRestoringScrollState() {
+        if (allSessionsViewModel.sessions is Result.Success<*>) {
+            scrollToPreviousSession()
+        } else {
+            allSessionsViewModel.isNeedRestoreScrollState = true
+        }
+    }
+
+    private fun scrollToPreviousSession() {
+        allSessionsViewModel.isNeedRestoreScrollState = false
+        val layoutManager = binding.sessionsRecycler.layoutManager as LinearLayoutManager
+        layoutManager.restoreScrollState(PreviousSessionPrefs.scrollState)
+        PreviousSessionPrefs.initPreviousSessionPrefs()
     }
 
     private fun setupRecyclerView() {
@@ -107,8 +165,10 @@ class AllSessionsFragment : Fragment(), Injectable {
                         val dayTitle = getString(R.string.session_day_title, dayNumber)
                         binding.dayHeader.setTextIfChanged(dayTitle)
                     })
-            setLinearDivider(R.drawable.shape_divider_vertical_6dp,
+            setLinearDivider(R.drawable.shape_divider_vertical_12dp,
                     layoutManager as LinearLayoutManager)
+            recycledViewPool = sharedRecycledViewPool
+            (layoutManager as LinearLayoutManager).recycleChildrenOnDetach = true
         }
     }
 

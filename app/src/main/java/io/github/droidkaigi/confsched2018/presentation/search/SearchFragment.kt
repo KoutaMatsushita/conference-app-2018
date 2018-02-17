@@ -1,16 +1,20 @@
 package io.github.droidkaigi.confsched2018.presentation.search
 
+import android.app.Activity
+import android.app.SearchManager
 import android.arch.lifecycle.ViewModelProvider
 import android.arch.lifecycle.ViewModelProviders
 import android.content.Context
+import android.database.CrossProcessCursor
 import android.os.Bundle
+import android.provider.SearchRecentSuggestions
 import android.support.annotation.StringRes
 import android.support.v4.app.Fragment
 import android.support.v4.app.FragmentManager
-import android.support.v4.app.FragmentStatePagerAdapter
 import android.support.v7.widget.LinearLayoutManager
 import android.support.v7.widget.SearchView
 import android.support.v7.widget.SimpleItemAnimator
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -18,37 +22,40 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
+import androidx.view.forEach
+import com.google.firebase.analytics.FirebaseAnalytics
 import com.xwray.groupie.GroupAdapter
 import com.xwray.groupie.ViewHolder
+import dagger.android.support.DaggerFragment
 import io.github.droidkaigi.confsched2018.R
 import io.github.droidkaigi.confsched2018.databinding.FragmentSearchBinding
-import io.github.droidkaigi.confsched2018.di.Injectable
 import io.github.droidkaigi.confsched2018.model.Session
+import io.github.droidkaigi.confsched2018.presentation.FragmentStateNullablePagerAdapter
 import io.github.droidkaigi.confsched2018.presentation.NavigationController
 import io.github.droidkaigi.confsched2018.presentation.Result
-import io.github.droidkaigi.confsched2018.presentation.common.binding.FragmentDataBindingComponent
+import io.github.droidkaigi.confsched2018.presentation.common.view.OnTabReselectedDispatcher
 import io.github.droidkaigi.confsched2018.presentation.search.item.SearchResultSpeakerItem
 import io.github.droidkaigi.confsched2018.presentation.search.item.SearchSpeakersSection
 import io.github.droidkaigi.confsched2018.presentation.sessions.item.SimpleSessionsSection
 import io.github.droidkaigi.confsched2018.presentation.sessions.item.SpeechSessionItem
 import io.github.droidkaigi.confsched2018.util.SessionAlarm
 import io.github.droidkaigi.confsched2018.util.ext.color
-import io.github.droidkaigi.confsched2018.util.ext.eachChildView
 import io.github.droidkaigi.confsched2018.util.ext.observe
 import io.github.droidkaigi.confsched2018.util.ext.setLinearDivider
 import io.github.droidkaigi.confsched2018.util.ext.toGone
 import io.github.droidkaigi.confsched2018.util.ext.toVisible
 import timber.log.Timber
 import javax.inject.Inject
+import kotlin.properties.Delegates
 
-class SearchFragment : Fragment(), Injectable {
+class SearchFragment : DaggerFragment() {
     private lateinit var binding: FragmentSearchBinding
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
     @Inject lateinit var navigationController: NavigationController
     @Inject lateinit var sessionAlarm: SessionAlarm
 
     private val sessionsSection = SimpleSessionsSection()
-    private val speakersSection = SearchSpeakersSection(FragmentDataBindingComponent(this))
+    private val speakersSection = SearchSpeakersSection()
 
     private val searchViewModel: SearchViewModel by lazy {
         ViewModelProviders.of(this, viewModelFactory).get(SearchViewModel::class.java)
@@ -57,6 +64,10 @@ class SearchFragment : Fragment(), Injectable {
     private val onFavoriteClickListener = { session: Session.SpeechSession ->
         searchViewModel.onFavoriteClick(session)
         sessionAlarm.toggleRegister(session)
+    }
+
+    private val onFeedbackListener = { session: Session.SpeechSession ->
+        navigationController.navigateToSessionsFeedbackActivity(session)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,8 +90,11 @@ class SearchFragment : Fragment(), Injectable {
 
     private fun setupSearchBeforeTabs() {
         binding.sessionsViewPager.adapter =
-                SearchBeforeViewPagerAdapter(context!!, childFragmentManager)
+                SearchBeforeViewPagerAdapter(activity!!, childFragmentManager)
         binding.tabLayout.setupWithViewPager(binding.sessionsViewPager)
+        binding.tabLayout.addOnTabSelectedListener(
+                OnTabReselectedDispatcher(binding.sessionsViewPager)
+        )
     }
 
     private fun setupSearch() {
@@ -92,6 +106,7 @@ class SearchFragment : Fragment(), Injectable {
                     sessionsSection.updateSessions(
                             searchResult.sessions,
                             onFavoriteClickListener,
+                            onFeedbackListener,
                             searchViewModel.searchQuery
                     )
                     speakersSection.updateSpeakers(
@@ -138,8 +153,18 @@ class SearchFragment : Fragment(), Injectable {
 
         val searchView = menuSearchItem.actionView as SearchView
         searchView.maxWidth = Int.MAX_VALUE
+
+        val searchManager = activity?.getSystemService(Context.SEARCH_SERVICE) as SearchManager
+        searchView.setSearchableInfo(searchManager.getSearchableInfo(activity?.componentName))
+
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean = false
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                val searchRecentSuggestions = SearchRecentSuggestions(context,
+                        SearchSuggestionProvider.AUTHORITY, SearchSuggestionProvider.MODE)
+                searchRecentSuggestions.saveRecentQuery(searchViewModel.searchQuery, null)
+                searchView.clearFocus()
+                return false
+            }
 
             override fun onQueryTextChange(newText: String?): Boolean {
                 val query = newText.orEmpty()
@@ -154,13 +179,30 @@ class SearchFragment : Fragment(), Injectable {
                 return false
             }
         })
+
+        searchView.setOnSuggestionListener(object : SearchView.OnSuggestionListener {
+            override fun onSuggestionSelect(position: Int): Boolean {
+                return false
+            }
+
+            override fun onSuggestionClick(position: Int): Boolean {
+                val item = searchView.suggestionsAdapter.getItem(position) as CrossProcessCursor
+                searchView.setQuery(item.getString(2), false)
+                return false
+            }
+        })
+
         changeSearchViewTextColor(searchView)
 
         searchView.setOnQueryTextFocusChangeListener { view, hasFocus ->
             if (!hasFocus) {
-                val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as
-                        InputMethodManager
-                imm.hideSoftInputFromWindow(view.windowToken, 0)
+                if (TextUtils.isEmpty(searchView.query)) {
+                    searchView.isIconified = true
+                } else {
+                    val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as
+                            InputMethodManager
+                    imm.hideSoftInputFromWindow(view.windowToken, 0)
+                }
             }
         }
     }
@@ -171,7 +213,7 @@ class SearchFragment : Fragment(), Injectable {
         }
 
         if (view is ViewGroup) {
-            view.eachChildView {
+            view.forEach {
                 changeSearchViewTextColor(it)
             }
         }
@@ -183,27 +225,43 @@ class SearchFragment : Fragment(), Injectable {
 }
 
 class SearchBeforeViewPagerAdapter(
-        val context: Context,
+        private val activity: Activity,
         fragmentManager: FragmentManager
-) : FragmentStatePagerAdapter(fragmentManager) {
+) : FragmentStateNullablePagerAdapter(fragmentManager) {
 
-    enum class Tab(@StringRes val title: Int) {
-        Session(R.string.search_before_tab_session),
-        Topic(R.string.search_before_tab_topic),
-        Speakers(R.string.search_before_tab_speaker);
-    }
-
-    override fun getPageTitle(position: Int): CharSequence =
-            context.getString(Tab.values()[position].title)
-
-    override fun getItem(position: Int): Fragment {
-        val tab = Tab.values()[position]
-        return when (tab) {
-            Tab.Session -> SearchSessionsFragment.newInstance()
-            Tab.Topic -> SearchTopicsFragment.newInstance()
-            Tab.Speakers -> SearchSpeakersFragment.newInstance()
+    private val fireBaseAnalytics = FirebaseAnalytics.getInstance(activity)
+    private var currentFragment by Delegates.observable<Fragment?>(null) { _, old, new ->
+        if (old != new && new != null) {
+            fireBaseAnalytics.setCurrentScreen(activity, null, new::class.java.simpleName)
         }
     }
 
+    enum class Tab(@StringRes val title: Int) {
+        SESSION(R.string.search_before_tab_session) {
+            override val fragment: Fragment
+                get() = SearchSessionsFragment.newInstance()
+        },
+        TOPIC(R.string.search_before_tab_topic) {
+            override val fragment: Fragment
+                get() = SearchTopicsFragment.newInstance()
+        },
+        SPEAKERS(R.string.search_before_tab_speaker) {
+            override val fragment: Fragment
+                get() = SearchSpeakersFragment.newInstance()
+        };
+
+        abstract val fragment: Fragment
+    }
+
+    override fun getPageTitle(position: Int): CharSequence =
+            activity.getString(Tab.values()[position].title)
+
+    override fun getItem(position: Int): Fragment = Tab.values()[position].fragment
+
     override fun getCount(): Int = Tab.values().size
+
+    override fun setPrimaryItem(container: ViewGroup, position: Int, o: Any?) {
+        super.setPrimaryItem(container, position, o)
+        currentFragment = o as? Fragment
+    }
 }

@@ -21,12 +21,19 @@
             >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.intent.action.SEARCH" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts"
+                />
+
+            <meta-data
+                android:name="android.app.searchable"
+                android:resource="@xml/searchable"
                 />
         </activity>
         <activity
@@ -36,6 +43,15 @@
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".presentation.MainActivity"
+                />
+        </activity>
+        <activity
+            android:name=".presentation.sessions.feedback.SessionsFeedbackActivity"
+            android:parentActivityName=".presentation.MainActivity"
+            >
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".presentation.sessions.feedback.SessionsFeedbackActivity"
                 />
         </activity>
         <activity
@@ -55,13 +71,16 @@
             >
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
+
                 <data
                     android:host="${host}"
                     android:path="/sponsors"
                     android:scheme="${scheme}"
                     />
             </intent-filter>
+
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".presentation.MainActivity"
@@ -106,26 +125,83 @@
                 />
         </activity>
         <activity
+            android:name="com.google.android.gms.oss.licenses.OssLicensesMenuActivity"
+            android:theme="@style/AppTheme.ActionBar"
+            >
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data
+                    android:host="${host}"
+                    android:path="/licenses"
+                    android:scheme="${scheme}"
+                    />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="com.google.android.gms.oss.licenses.OssLicensesActivity"
+            android:theme="@style/AppTheme.ActionBar"
+            />
+        <activity
             android:name=".presentation.contributor.ContributorsActivity"
             android:label="@string/contributors"
             android:parentActivityName=".presentation.MainActivity"
             >
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
+
                 <data
                     android:host="${host}"
                     android:path="/contributors"
                     android:scheme="${scheme}"
                     />
             </intent-filter>
+
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".presentation.MainActivity"
+                />
+        </activity>
+        <activity
+            android:name=".presentation.staff.StaffActivity"
+            android:label="@string/staff"
+            android:parentActivityName=".presentation.MainActivity"
+            >
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".presentation.MainActivity"
                 />
         </activity>
 
-        <receiver android:name=".presentation.common.broadcastreceiver.NotificationBroadcastReceiver" />
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDGetZ-L3B8oKXLHELbMsHmyPSyrQZW55s"
+            />
+
+        <receiver android:name=".presentation.common.notification.NotificationBroadcastReceiver" />
+
+        <receiver android:name=".presentation.common.notification.LocaleChangedBroadcastReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name=".presentation.search.SearchSuggestionProvider"
+            android:authorities="${applicationId}.presentation.search.SearchSuggestionProvider"
+            android:exported="false"
+            />
+        <service
+            android:name=".service.push.PushService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
